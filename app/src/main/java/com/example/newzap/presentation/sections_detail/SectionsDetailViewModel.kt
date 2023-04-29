@@ -1,0 +1,74 @@
+package com.example.newzap.presentation.sections_detail
+
+import android.content.Intent
+import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableStateOf
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.newzap.domain.repository.NewsRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+@HiltViewModel
+class SectionsDetailViewModel @Inject constructor(
+    private val repository: NewsRepository,
+    savedStateHandle: SavedStateHandle,
+) : ViewModel() {
+
+    private val sectionName: String = checkNotNull(savedStateHandle["sectionName"])
+
+    private val _sectionDetailState = mutableStateOf(SectionDetailState())
+    val sectionDetailState: State<SectionDetailState> = _sectionDetailState
+
+
+    init {
+        viewModelScope.launch {
+            repository.getNewsFromKeyword(sectionName).collect {
+                _sectionDetailState.value = sectionDetailState.value.copy(
+                    sectionList = it
+                )
+            }
+        }
+    }
+
+    fun onEvent(event: SectionDetailEvent) {
+        when (event) {
+            is SectionDetailEvent.Share -> {
+                val sendIntent: Intent = Intent().apply {
+                    action = Intent.ACTION_SEND
+                    putExtra(
+                        Intent.EXTRA_TEXT,
+                        "${event.news.newsTitle}:\n${event.news.newsUrl}\n\nKeep yourself updated with NewZap created by Gautam Hazarika."
+                    )
+                    type = "text/plain"
+                }
+
+                val shareIntent = Intent.createChooser(sendIntent, null)
+                event.context.startActivity(shareIntent)
+            }
+
+            is SectionDetailEvent.Save -> {
+                viewModelScope.launch {
+                    if (event.news.isSaved) {
+                        repository.deleteByTitle(
+                            event.news.copy(
+                                isSaved = false
+                            )
+                        )
+                    } else {
+                        repository.saveNews(
+                            event.news.copy(
+                                isSaved = true
+                            )
+                        )
+                    }
+
+                }
+
+            }
+        }
+    }
+
+}
